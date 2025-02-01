@@ -11,7 +11,7 @@ DarkLune is a lune script that watches for file changes and applies `convert_req
 ```lua
 -- .lune/dev.lua
 local darklune = require("./darklune")
-local process = require("darklua.process")
+local process = require("@lune/process")
 
 local OUTPUT_DIR = "dev"
 local PROJECT_FILE_PATH = "default.project.json"

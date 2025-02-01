@@ -20,12 +20,12 @@ local DARKLUA_CONFIG_PATH = "darklua.json"
 -- Start darklune
 darklune({
     outputDir = OUTPUT_DIR,
-	projectFilePath = PROJECT_FILE_PATH,
-	darkluaConfigPath = DARKLUA_CONFIG_PATH,
-	watchFolders = { "src" },
-	noWatchFolders = { "Packages", "ServerPackages" },
-	otherFoldersAndFiles = {},
-	stdio = "inherit",
+    projectFilePath = PROJECT_FILE_PATH,
+    darkluaConfigPath = DARKLUA_CONFIG_PATH,
+    watchFolders = { "src" },
+    noWatchFolders = { "Packages", "ServerPackages" },
+    otherFoldersAndFiles = {},
+    stdio = "inherit",
 })
 
 -- Start the Rojo server

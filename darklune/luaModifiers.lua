@@ -17,11 +17,7 @@ local fileMap = {}
 local function buildFileMap(node: Node, robloxPath: string)
 	for _, child in node.children do
 		local path = robloxPath
-		if
-			child.className == "ModuleScript"
-			or child.className == "Script"
-			or child.className == "Folder"
-		then
+		if child.className == "ModuleScript" or child.className == "Script" or child.className == "Folder" then
 			path = path .. ':FindFirstChild("' .. child.name .. '")'
 		elseif child.className == child.name then
 			path = path .. ':GetService("' .. child.className .. '")'
@@ -96,7 +92,7 @@ local function resolveNonStringRequire(requirePath: string, sourcePath: string):
 			end
 		end
 
-		warn("Unknown require: " .. formatedNonStringRequire)
+		print("Unknown require: " .. formatedNonStringRequire)
 
 		return nil
 	end
@@ -203,13 +199,31 @@ local function applyModifiers(source: string, sourcePath: string)
 end
 
 return {
-	init = function(darkluaConfigPath: string)
+	init = function(darkluaConfigPath: string, luaurcPath: string)
 		local darkluaConfig = serde.decode("json", fs.readFile(darkluaConfigPath))
+		local luaurc = serde.decode("json", fs.readFile(luaurcPath))
 
 		for _, processConfig in darkluaConfig.process do
 			if processConfig.rule == "convert_require" then
-				for key, value in processConfig.current.sources do
-					pathAliasMap[key] = value:gsub("/$", "")
+				if processConfig.current == "path" then
+					for alias, aliasPath in luaurc.aliases do
+						local luaurcFolder = luaurcPath:gsub(".luaurc$", "")
+						while aliasPath:sub(1, 3) == "../" do
+							aliasPath = aliasPath:sub(4)
+							local parentFolder = luaurcFolder:match("^(.*)/[^/]+$") or ""
+							if parentFolder then
+								luaurcFolder = parentFolder
+							else
+								error("Invalid aliasPath: cannot navigate above project root")
+							end
+						end
+
+						pathAliasMap[`@{alias}`] = luaurcFolder .. aliasPath
+					end
+				else
+					for key, value in processConfig.current.sources do
+						pathAliasMap[key] = value:gsub("/$", "")
+					end
 				end
 			elseif processConfig.rule == "inject_global_value" then
 				if processConfig.value then
@@ -229,7 +243,7 @@ return {
 			buildFileMap(serde.decode("json", source.stdout), "game")
 			return source.stdout
 		else
-			warn("Sometimes this appears because you have to run rokit install")
+			print("Sometimes this appears because you have to run rokit install")
 			error("Failed to update filemap\n" .. source.stderr)
 			return nil
 		end

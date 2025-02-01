@@ -19,9 +19,10 @@ local DARKLUA_CONFIG_PATH = "darklua.json"
 
 -- Start darklune
 darklune({
-    outputDir = OUTPUT_DIR,
-    projectFilePath = PROJECT_FILE_PATH,
-    darkluaConfigPath = DARKLUA_CONFIG_PATH,
+    outputDir = OUTPUT_DIR, -- Required
+    projectFilePath = PROJECT_FILE_PATH, -- Optional, defaults to "default.project.json"
+    darkluaConfigPath = DARKLUA_CONFIG_PATH, -- Optional, defaults to "darklua.json"
+    luaurcPath = "src/.luaurc", -- Optional, defaults to "src/.luaurc"
     watchFolders = { "src" },
     noWatchFolders = { "Packages", "ServerPackages" },
     otherFoldersAndFiles = {},

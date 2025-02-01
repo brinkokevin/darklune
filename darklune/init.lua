@@ -1,4 +1,5 @@
 local fs = require("@lune/fs")
+local net = require("@lune/net")
 local process = require("@lune/process")
 local stdio = require("@lune/stdio")
 local task = require("@lune/task")
@@ -36,13 +37,12 @@ local function processLuaFile(path: string, destPath: string)
 	local source = fs.readFile(path)
 
 	-- Auto convert non-string requires to strings in our source files
-	-- Enable if you want to use luau-lsp auto imports, this will automatically convert non string requires to string requires
-	-- local nonStringSource = luaModifiers.convertNonStringRequiresToString(source, path)
-	-- if nonStringSource then
-	-- 	nonStringSource = nonStringSource:gsub("^%s*\n", "")
-	-- 	fs.writeFile(path, nonStringSource)
-	-- 	stdio.write(`Fixed non-string requires in {colorText(path, "yellow")}\n`)
-	-- end
+	local nonStringSource = luaModifiers.convertNonStringRequiresToString(source, path)
+	if nonStringSource then
+		nonStringSource = nonStringSource:gsub("^%s*\n", "")
+		fs.writeFile(path, nonStringSource)
+		stdio.write(`Fixed non-string requires in {colorText(path, "yellow")}\n`)
+	end
 
 	-- update destination file with applied modifiers
 	writeDestinationFile(destPath, luaModifiers.applyModifiers(source, path))
@@ -90,6 +90,70 @@ local function fileChanged(path: string, destPath: string)
 	end
 end
 
+local function processPackages(outputDir: string, name: string, darkluaConfigPath: string)
+	local function processPath(path: string)
+		stdio.write(stdio.color("cyan"))
+		print("Processing " .. outputDir .. "/" .. path)
+		stdio.write(stdio.color("reset"))
+
+		process.spawn("darklua", { "process", path, path, "-c", darkluaConfigPath }, {
+			cwd = outputDir,
+			stdio = {
+				stderr = "inherit",
+			},
+		})
+	end
+
+	local function getProjectTreePath(packageFolderPath: string)
+		if fs.isFile(packageFolderPath .. "/default.project.json") then
+			local projectFormat = net.jsonDecode(fs.readFile(packageFolderPath .. "/default.project.json"))
+			local treePath = projectFormat.tree["$path"]
+			if not treePath or treePath:match("/") then
+				if treePath:match("%./(.+)") then
+					treePath = treePath:match("%./(.+)")
+				else
+					error(`{packageFolderPath} {treePath}`)
+				end
+			end
+			return treePath
+		elseif fs.isFile(packageFolderPath .. "/init.lua") then
+			return "init.lua"
+		elseif fs.isFile(packageFolderPath .. "/init.luau") then
+			return "init.luau"
+		else
+			error(`{packageFolderPath}`)
+		end
+	end
+
+	local function cleanupPackage(path: string, dirName: string)
+		local _author, packageName, _version = dirName:match("^(.+)_(.+)@(.+)$")
+		local packageFolderPath = `{path}/{dirName}/{packageName}`
+		local treePath = getProjectTreePath(packageFolderPath)
+		for _, folder in ipairs(fs.readDir(packageFolderPath)) do
+			if folder ~= treePath and folder ~= "default.project.json" then
+				if fs.isDir(packageFolderPath .. "/" .. folder) then
+					fs.removeDir(packageFolderPath .. "/" .. folder)
+				else
+					fs.removeFile(packageFolderPath .. "/" .. folder)
+				end
+			end
+		end
+	end
+
+	for _, folder in fs.readDir(outputDir .. "/" .. name) do
+		if fs.isDir(outputDir .. "/" .. name .. "/" .. folder) then
+			if folder == "_Index" then
+				for _, subfolder in ipairs(fs.readDir(outputDir .. "/" .. name .. "/_Index")) do
+					cleanupPackage(outputDir .. "/" .. name .. "/_Index/", subfolder)
+					processPath(name .. "/_Index/" .. subfolder)
+				end
+			else
+				processPath(name .. "/" .. folder)
+			end
+		end
+	end
+end
+
 --[[
 	outputDir: the destination directory name, defaults to ".dev"
 	projectFilePath: the path to the project.json file, defaults to "default.project.json"
@@ -101,6 +165,7 @@ local function darklune(config: {
 	outputDir: string?,
 	projectFilePath: string?,
 	darkluaConfigPath: string?,
+	luaurcPath: string?,
 	watchFolders: { string }?,
 	noWatchFolders: { string }?,
 	otherFoldersAndFiles: { string }?,
@@ -109,11 +174,12 @@ local function darklune(config: {
 	local outputDir = config.outputDir or ".dev"
 	local projectFilePath = config.projectFilePath or "default.project.json"
 	local darkluaConfigPath = config.darkluaConfigPath or "darklua.json"
+	local luaurcPath = config.luaurcPath or "src/.luaurc"
 	local watchFolders = config.watchFolders or {} :: { string }
 	local noWatchFolders = config.noWatchFolders or {} :: { string }
 	local otherFoldersAndFiles = config.otherFoldersAndFiles or {} :: { string }
 
-	luaModifiers.init(darkluaConfigPath)
+	luaModifiers.init(darkluaConfigPath, luaurcPath)
 
 	if not table.find(otherFoldersAndFiles, darkluaConfigPath) then
 		table.insert(otherFoldersAndFiles, darkluaConfigPath)
@@ -121,6 +187,7 @@ local function darklune(config: {
 	if not table.find(otherFoldersAndFiles, projectFilePath) then
 		table.insert(otherFoldersAndFiles, projectFilePath)
 	end
+	table.insert(otherFoldersAndFiles, "sourcemap.json")
 
 	-- recreate the destination directory
 	if fs.isDir(outputDir) then
@@ -128,29 +195,30 @@ local function darklune(config: {
 	end
 	fs.writeDir(outputDir)
 
-	-- these are files like darklua.json and default.project.json
+	-- copy files to output dir
 	for _, folder in otherFoldersAndFiles do
 		fs.copy(folder, `{outputDir}/{folder}`, true)
 	end
-
-	-- these are folders that are processed with darklua, but not watched for changes
 	for _, folder in noWatchFolders do
-		task.spawn(function()
-			process.spawn("darklua", { "process", folder, `{outputDir}/{folder}` }, {
-				stdio = config.stdio,
-			})
-		end)
+		fs.copy(folder, `{outputDir}/{folder}`, true)
+	end
+	for _, folder in watchFolders do
+		fs.copy(folder, `{outputDir}/{folder}`, true)
+	end
+
+	-- darklua process
+	for _, folder in noWatchFolders do
+		processPackages(outputDir, folder, darkluaConfigPath)
+	end
+	for _, folder in watchFolders do
+		processPackages(outputDir, folder, darkluaConfigPath)
 	end
 
 	-- build internal file map for non darklua file processing
 	luaModifiers.buildFileMap(projectFilePath)
 
-	-- copy folders that process lua files
+	-- watch folders for changes
 	for _, folder in watchFolders do
-		process.spawn("darklua", { "process", folder, `{outputDir}/{folder}` }, {
-			stdio = config.stdio,
-		})
-
 		task.spawn(fileWatcher.watch, {
 			path = folder,
 			onFileCreated = function(path)

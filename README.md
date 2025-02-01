@@ -46,3 +46,8 @@ When darklune starts, it will:
 - It will then watch for file changes in the watchFolders directories
 - When a file is changed, it will apply the `convert_require` and `inject_global_value` generators to the file and save them to the outputDir
 - It will also automatically regenerate `sourcemap.json` as files are changed.
+
+## Bonus
+
+If you want to use auto import feature in luau-lsp, you can go to `darklune/init.lua` and uncomment the code in `processLuaFile` function.
+This will convert non string requires to string requires when file is saved.

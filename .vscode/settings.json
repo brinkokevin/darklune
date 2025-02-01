@@ -1,0 +1,9 @@
+{
+  "luau-lsp.diagnostics.strictDatamodelTypes": true,
+  "luau-lsp.completion.imports.requireStyle": "alwaysRelative",
+  "luau-lsp.platform.type": "standard",
+  "luau-lsp.require.mode": "relativeToFile",
+  "luau-lsp.require.directoryAliases": {
+    "@lune/": "~/.lune/.typedefs/0.8.9/"
+  }
+}

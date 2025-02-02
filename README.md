@@ -50,5 +50,47 @@ When darklune starts, it will:
 
 ## Bonus
 
+### Auto Import Requires
+
 If you want to use auto import feature in luau-lsp, you can go to `darklune/init.lua` and uncomment the code in `processLuaFile` function.
 This will convert non string requires to string requires when file is saved.
+
+### Zap
+
+If you are using zap you may add this to `.lune/dev.lua` to listen for .zap file changes and automatically rerun it on change.
+
+```lua
+local ZAP_FILE_PATH = "network.zap"
+
+-- Generate initial network files
+process.spawn("zap", { path }, {
+    stdio = "inherit",
+})
+
+-- Listen to changes
+task.spawn(fileWatcher.watchFile, ZAP_FILE_PATH, function()
+    process.spawn("zap", { path }, {
+        stdio = "inherit",
+    })
+end)
+```
+
+This can also be done for more complex zap setups for example listening to multiple zap folders in a certain directory.
+
+```lua
+local ZAP_FILE_FOLDER = "src/net"
+
+for _, file in ipairs(fs.readDir(ZAP_FILE_FOLDER)) do
+    process.spawn("zap", { `{ZAP_FILE_FOLDER}/{file}` }, {
+        stdio = "inherit",
+    })
+end
+
+task.spawn(fileWatcher.watchDirectory, ZAP_FILE_FOLDER, function(action, path)
+    if action == "create" or action == "change" then
+        process.spawn("zap", { path }, {
+            stdio = "inherit",
+        })
+    end
+end)
+```
